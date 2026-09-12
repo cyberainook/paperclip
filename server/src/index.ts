@@ -1966,7 +1966,10 @@ async function startServerWithDatabaseTeardown(
     const appShutdown = (app as { locals?: { paperclipShutdown?: () => Promise<void> } }).locals
       ?.paperclipShutdown;
     const stopEmbeddedPostgres = embeddedPostgres && embeddedPostgresStartedByThisProcess
-      ? () => embeddedPostgresSupervisor?.shutdown() ?? embeddedPostgres!.stop()
+      ? async () => {
+          await (embeddedPostgresSupervisor?.shutdown() ?? embeddedPostgres!.stop());
+          logger.info({ signal }, "Embedded PostgreSQL stopped after graceful heartbeat drain");
+        }
       : null;
 
     // Await the ordered application teardown before the process exits. A live
