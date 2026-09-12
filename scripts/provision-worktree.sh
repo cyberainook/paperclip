@@ -504,7 +504,7 @@ async function main() {
       embeddedPostgresDataDir: path.resolve(instanceRoot, "db"),
       embeddedPostgresPort: databasePort,
       backup: {
-        enabled: sourceConfig?.database?.backup?.enabled ?? true,
+        enabled: false,
         intervalMinutes: sourceConfig?.database?.backup?.intervalMinutes ?? 60,
         retentionDays: sourceConfig?.database?.backup?.retentionDays ?? 30,
         dir: path.resolve(instanceRoot, "data", "backups"),
@@ -517,9 +517,8 @@ async function main() {
     server: {
       deploymentMode: sourceConfig?.server?.deploymentMode ?? "local_trusted",
       exposure: sourceConfig?.server?.exposure ?? "private",
-      ...(sourceConfig?.server?.bind ? { bind: sourceConfig.server.bind } : {}),
-      ...(sourceConfig?.server?.customBindHost ? { customBindHost: sourceConfig.server.customBindHost } : {}),
-      host: sourceConfig?.server?.host ?? "127.0.0.1",
+      bind: "loopback",
+      host: "127.0.0.1",
       port: serverPort,
       allowedHostnames: sourceConfig?.server?.allowedHostnames ?? [],
       serveUi: sourceConfig?.server?.serveUi ?? true,
@@ -580,6 +579,7 @@ async function main() {
     "PAPERCLIP_CONFIG=" + JSON.stringify(configPath),
     "PAPERCLIP_CONTEXT=" + JSON.stringify(path.resolve(worktreeHome, "context.json")),
     "PAPERCLIP_IN_WORKTREE=true",
+    "PAPERCLIP_DB_BACKUP_ENABLED=false",
     "PAPERCLIP_WORKTREE_NAME=" + JSON.stringify(worktreeName),
   ];
 

@@ -43,6 +43,15 @@ type WorktreeEnvBootstrapResult =
   | { envPath: string; missingEnv: true }
   | { envPath: string; missingEnv: false };
 
+const WORKTREE_OWNED_ENV_KEYS = new Set([
+  "PAPERCLIP_HOME",
+  "PAPERCLIP_INSTANCE_ID",
+  "PAPERCLIP_CONFIG",
+  "PAPERCLIP_CONTEXT",
+  "PAPERCLIP_IN_WORKTREE",
+  "PAPERCLIP_DB_BACKUP_ENABLED",
+]);
+
 export function isLinkedGitWorktreeCheckout(rootDir: string): boolean {
   const gitMetadataPath = path.join(rootDir, ".git");
   if (!existsSync(gitMetadataPath)) return false;
@@ -131,7 +140,14 @@ export function bootstrapDevRunnerWorktreeEnv(
     env,
   );
   for (const [key, value] of Object.entries(entries)) {
-    if (typeof env[key] === "string" && env[key]!.trim().length > 0) continue;
+    // A managed worktree identity and destructive-runtime controls belong to
+    // the repo-local env file. Heartbeat processes carry the live instance env,
+    // so normal dotenv precedence would start this checkout against live.
+    if (
+      !WORKTREE_OWNED_ENV_KEYS.has(key)
+      && typeof env[key] === "string"
+      && env[key]!.trim().length > 0
+    ) continue;
     env[key] = value;
   }
 

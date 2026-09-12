@@ -73,7 +73,7 @@ describe("dev-runner worktree env bootstrap", () => {
     expect(isLinkedGitWorktreeCheckout(root)).toBe(true);
   });
 
-  it("loads repo-local Paperclip env for initialized worktrees without overriding explicit env", () => {
+  it("replaces inherited live instance identity with the repo-local worktree identity", () => {
     const root = createTempRoot("paperclip-dev-runner-worktree-env-");
     fs.mkdirSync(path.join(root, ".paperclip"), { recursive: true });
     fs.writeFileSync(path.join(root, ".git"), "gitdir: /tmp/paperclip/.git/worktrees/feature\n", "utf8");
@@ -82,6 +82,8 @@ describe("dev-runner worktree env bootstrap", () => {
       [
         "PAPERCLIP_HOME=/tmp/paperclip-worktrees",
         "PAPERCLIP_INSTANCE_ID=feature-worktree",
+        `PAPERCLIP_CONFIG=${path.join(root, ".paperclip", "config.json")}`,
+        "PAPERCLIP_DB_BACKUP_ENABLED=false",
         "PAPERCLIP_IN_WORKTREE=true",
         "PAPERCLIP_WORKTREE_NAME=feature-worktree",
         "PAPERCLIP_OPTIONAL= # comment-only value",
@@ -91,7 +93,11 @@ describe("dev-runner worktree env bootstrap", () => {
     );
 
     const env: NodeJS.ProcessEnv = {
-      PAPERCLIP_INSTANCE_ID: "already-set",
+      PAPERCLIP_HOME: "/srv/live-paperclip",
+      PAPERCLIP_INSTANCE_ID: "default",
+      PAPERCLIP_CONFIG: "/srv/live-paperclip/instances/default/config.json",
+      PAPERCLIP_DB_BACKUP_ENABLED: "true",
+      PAPERCLIP_OPTIONAL: "keep-explicit-non-control-value",
     };
     const result = bootstrapDevRunnerWorktreeEnv(root, env);
 
@@ -100,9 +106,11 @@ describe("dev-runner worktree env bootstrap", () => {
       missingEnv: false,
     });
     expect(env.PAPERCLIP_HOME).toBe("/tmp/paperclip-worktrees");
-    expect(env.PAPERCLIP_INSTANCE_ID).toBe("already-set");
+    expect(env.PAPERCLIP_INSTANCE_ID).toBe("feature-worktree");
+    expect(env.PAPERCLIP_CONFIG).toBe(path.join(root, ".paperclip", "config.json"));
+    expect(env.PAPERCLIP_DB_BACKUP_ENABLED).toBe("false");
     expect(env.PAPERCLIP_IN_WORKTREE).toBe("true");
-    expect(env.PAPERCLIP_OPTIONAL).toBe("");
+    expect(env.PAPERCLIP_OPTIONAL).toBe("keep-explicit-non-control-value");
   });
 
   it("repairs stale migrated config paths before loading worktree env", () => {

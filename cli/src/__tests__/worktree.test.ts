@@ -427,8 +427,12 @@ describe("worktree helpers", () => {
       homeDir: "/tmp/paperclip-worktrees",
       instanceId: "feature-worktree-support",
     });
+    const sourceConfig = buildSourceConfig();
+    sourceConfig.server.bind = "custom";
+    sourceConfig.server.customBindHost = "0.0.0.0";
+    sourceConfig.server.host = "0.0.0.0";
     const config = buildWorktreeConfig({
-      sourceConfig: buildSourceConfig(),
+      sourceConfig,
       paths,
       serverPort: 3110,
       databasePort: 54339,
@@ -440,6 +444,9 @@ describe("worktree helpers", () => {
     );
     expect(config.database.embeddedPostgresPort).toBe(54339);
     expect(config.database.backup.enabled).toBe(false);
+    expect(config.server.bind).toBe("loopback");
+    expect(config.server.host).toBe("127.0.0.1");
+    expect(config.server.customBindHost).toBeUndefined();
     expect(config.server.port).toBe(3110);
     expect(config.auth.publicBaseUrl).toBe("http://127.0.0.1:3110/");
     expect(config.storage.localDisk.baseDir).toBe(
