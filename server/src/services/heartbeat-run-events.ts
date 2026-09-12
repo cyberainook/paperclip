@@ -49,7 +49,18 @@ export async function allocateHeartbeatRunEventSeq(
   const [updated] = await db
     .update(heartbeatRuns)
     .set({
-      nextEventSeq: sql`${heartbeatRuns.nextEventSeq} + 1`,
+      // A full restore can contain historical events from an active source run
+      // while carrying the column default (1) for its allocator cursor. Heal
+      // that drift while reserving so shutdown/recovery writers cannot collide
+      // with the restored rows.
+      nextEventSeq: sql`greatest(
+        ${heartbeatRuns.nextEventSeq},
+        coalesce((
+          select max(${heartbeatRunEvents.seq}) + 1
+          from ${heartbeatRunEvents}
+          where ${heartbeatRunEvents.runId} = ${runId}
+        ), 1)
+      ) + 1`,
       updatedAt: new Date(),
     })
     .where(eq(heartbeatRuns.id, runId))

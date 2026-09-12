@@ -3501,6 +3501,40 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     ]);
   });
 
+  it("drains a restored active run whose event cursor trails restored events", async () => {
+    const { runId } = await seedRunFixture({
+      agentStatus: "running",
+      adapterType: "process",
+    });
+    await db.update(heartbeatRuns).set({ nextEventSeq: 1 })
+      .where(eq(heartbeatRuns.id, runId));
+
+    await expect(
+      heartbeatService(db).drainRunningRunsForShutdown(
+        "SIGINT",
+        new Date("2026-09-12T15:21:00.000Z"),
+        [runId],
+      ),
+    ).resolves.toMatchObject({
+      interrupted: 1,
+      interruptedRunIds: [runId],
+    });
+
+    const events = await db.select({
+      seq: heartbeatRunEvents.seq,
+      message: heartbeatRunEvents.message,
+    }).from(heartbeatRunEvents)
+      .where(eq(heartbeatRunEvents.runId, runId))
+      .orderBy(heartbeatRunEvents.seq);
+    expect(events).toEqual([
+      expect.objectContaining({ seq: 1 }),
+      expect.objectContaining({
+        seq: 2,
+        message: "Interrupted by graceful server shutdown (SIGINT)",
+      }),
+    ]);
+  });
+
   it("suspends native Paperclip Runner ownership on graceful restart without cancelling or creating a retry run", async () => {
     const { agentId, runId, issueId, wakeupRequestId } = await seedRunFixture({
       adapterType: "paperclip_runner",

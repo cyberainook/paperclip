@@ -70,6 +70,13 @@ describe("P6-11..13 / P6-17 canonical event allocator", () => {
       expect((await db.select({ nextEventSeq: heartbeatRuns.nextEventSeq }).from(heartbeatRuns)
         .where(eq(heartbeatRuns.id, runId)))[0]?.nextEventSeq).toBe(49);
 
+      await db.update(heartbeatRuns).set({ nextEventSeq: 1 })
+        .where(eq(heartbeatRuns.id, runId));
+      const restoredSeq = await allocateHeartbeatRunEventSeq(db, runId);
+      expect(restoredSeq).toBe(49);
+      expect((await db.select({ nextEventSeq: heartbeatRuns.nextEventSeq }).from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, runId)))[0]?.nextEventSeq).toBe(50);
+
       const original = rows.find((row) => row.sourceEventId === "source-event-1")!;
       await expect(appendHeartbeatRunEvent(db, {
         companyId,
