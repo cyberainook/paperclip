@@ -812,6 +812,45 @@ export async function runDatabaseBackup(opts: RunDatabaseBackupOptions): Promise
       emit("");
     }
 
+    // Keep CHECK constraints in portable/JavaScript backups. Worktree seeds
+    // restore the source migration journal before applying newer migrations;
+    // those migrations may legitimately replace a pre-existing CHECK by name.
+    // Omitting it makes an otherwise faithful full seed fail at the later
+    // DROP CONSTRAINT statement.
+    const allCheckConstraints = await sql<{
+      constraint_name: string;
+      schema_name: string;
+      tablename: string;
+      definition: string;
+      validated: boolean;
+    }[]>`
+      SELECT c.conname AS constraint_name,
+             n.nspname AS schema_name,
+             t.relname AS tablename,
+             pg_get_constraintdef(c.oid, true) AS definition,
+             c.convalidated AS validated
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE c.contype = 'c'
+        AND ${sql.unsafe(nonSystemSchemaPredicate("n.nspname"))}
+      ORDER BY n.nspname, t.relname, c.conname
+    `;
+    const checks = allCheckConstraints.filter((entry) =>
+      includedTableNames.has(tableKey(entry.schema_name, entry.tablename)),
+    );
+
+    if (checks.length > 0) {
+      emit("-- Check constraints");
+      for (const check of checks) {
+        const notValid = check.validated ? "" : " NOT VALID";
+        emitStatement(
+          `ALTER TABLE ${quoteQualifiedName(check.schema_name, check.tablename)} ADD CONSTRAINT "${check.constraint_name}" ${check.definition}${notValid};`,
+        );
+      }
+      emit("");
+    }
+
     // Collect foreign keys now. Emit them after routines and standalone indexes
     // because PostgreSQL permits a non-constraint unique index to be the target
     // of a foreign key.

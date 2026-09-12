@@ -300,7 +300,8 @@ describeEmbeddedPostgres("runDatabaseBackup", () => {
             "id" serial PRIMARY KEY,
             "parent_id" uuid NOT NULL REFERENCES "public"."backup_parent_records"("id") ON DELETE CASCADE,
             "status" "plugin_backup_scope"."plugin_status" NOT NULL,
-            "note" text NOT NULL
+            "note" text NOT NULL,
+            CONSTRAINT "plugin_rows_note_check" CHECK (length("note") > 2)
           );
           CREATE TABLE "plugin_backup_scope"."audit_rows" (
             "id" serial PRIMARY KEY,
@@ -366,6 +367,12 @@ describeEmbeddedPostgres("runDatabaseBackup", () => {
           restoreSql.unsafe(`
             INSERT INTO "plugin_backup_scope"."plugin_rows" ("parent_id", "status", "note")
             VALUES ('11111111-1111-4111-8111-111111111111', 'done', 'first')
+          `),
+        ).rejects.toThrow();
+        await expect(
+          restoreSql.unsafe(`
+            INSERT INTO "plugin_backup_scope"."plugin_rows" ("parent_id", "status", "note")
+            VALUES ('11111111-1111-4111-8111-111111111111', 'done', 'x')
           `),
         ).rejects.toThrow();
       } finally {

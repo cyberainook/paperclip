@@ -2391,10 +2391,13 @@ export async function ensureWorktreeSeeded(
   }
 }
 
-export function resolveWorktreeSeedBackupEngine(seedPlan: WorktreeSeedPlan): "auto" | "javascript" {
-  return seedPlan.excludedTables.length === 0 && Object.keys(seedPlan.nullifyColumns).length === 0
-    ? "auto"
-    : "javascript";
+export function resolveWorktreeSeedBackupEngine(_seedPlan: WorktreeSeedPlan): "javascript" {
+  // Worktree restore must remain self-contained in the managed npm install.
+  // embedded-postgres ships the server executables but not psql, while an
+  // auto-selected pg_dump snapshot contains COPY FROM stdin commands that the
+  // JavaScript restore fallback cannot replay. Emit the portable INSERT-based
+  // format for full seeds as well as transformed/minimal seeds.
+  return "javascript";
 }
 
 async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
@@ -2706,7 +2709,7 @@ export function resolvePnpmInstallInvocation(
     }
     return { command: npmExecPath, argsPrefix: [] };
   }
-  return { command: "pnpm", argsPrefix: [] };
+  return { command: "corepack", argsPrefix: ["pnpm"] };
 }
 
 function installDependenciesBestEffort(targetPath: string): void {

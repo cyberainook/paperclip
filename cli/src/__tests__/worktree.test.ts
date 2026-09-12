@@ -370,8 +370,8 @@ describe("worktree helpers", () => {
         "/usr/local/bin/node",
       ),
     ).toEqual({
-      command: "pnpm",
-      argsPrefix: [],
+      command: "corepack",
+      argsPrefix: ["pnpm"],
     });
   });
 
@@ -2044,8 +2044,8 @@ describe("worktree helpers", () => {
     }
   });
 
-  it("uses streaming backup selection for full seeds and transformed backup selection for minimal seeds", () => {
-    expect(resolveWorktreeSeedBackupEngine(resolveWorktreeSeedPlan("full"))).toBe("auto");
+  it("uses the portable backup engine for full and transformed seeds", () => {
+    expect(resolveWorktreeSeedBackupEngine(resolveWorktreeSeedPlan("full"))).toBe("javascript");
     expect(resolveWorktreeSeedBackupEngine(resolveWorktreeSeedPlan("minimal"))).toBe("javascript");
   });
 
