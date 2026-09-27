@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { activityLog, heartbeatRuns } from "@paperclipai/db";
 import { isUuidLike, issueWriteDenialResponse } from "@paperclipai/shared";
@@ -10,6 +10,35 @@ export const CROSS_ISSUE_INFLUENCE_ENFORCE_AT = new Date("2026-08-11T00:00:00.00
 
 const CROSS_ISSUE_INFLUENCE_ACTIVITY = "issue.cross_issue_influence_observed";
 const CROSS_ISSUE_INFLUENCE_REJECTED_ACTIVITY = "issue.cross_issue_influence_cap_rejected";
+
+/**
+ * Timer heartbeats can start without an issue in their context snapshot and
+ * then claim work from the inbox. The first successful checkout is the only
+ * safe point at which such a run can acquire an issue scope. Keep that scope
+ * immutable so later cross-issue checkouts cannot redefine the source and
+ * evade the per-run containment counter.
+ */
+export async function bindUnscopedRunToFirstCheckedOutIssue(
+  db: Db,
+  input: { companyId: string; runId: string; agentId: string; issueId: string },
+) {
+  if (!isUuidLike(input.runId)) return false;
+  const contextPatch = JSON.stringify({ issueId: input.issueId, taskId: input.issueId });
+  const rows = await db
+    .update(heartbeatRuns)
+    .set({
+      contextSnapshot: sql`coalesce(${heartbeatRuns.contextSnapshot}, '{}'::jsonb) || ${contextPatch}::jsonb`,
+    })
+    .where(and(
+      eq(heartbeatRuns.id, input.runId),
+      eq(heartbeatRuns.companyId, input.companyId),
+      eq(heartbeatRuns.agentId, input.agentId),
+      isNull(sql`${heartbeatRuns.contextSnapshot} ->> 'issueId'`),
+      isNull(sql`${heartbeatRuns.contextSnapshot} ->> 'taskId'`),
+    ))
+    .returning({ id: heartbeatRuns.id });
+  return rows.length > 0;
+}
 
 /**
  * Every kind shares one per-run counter. `interaction_resolution` covers the

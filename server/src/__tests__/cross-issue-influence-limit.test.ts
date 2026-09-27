@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CROSS_ISSUE_INFLUENCE_ENFORCE_AT,
   CROSS_ISSUE_INFLUENCE_LIMIT,
+  bindUnscopedRunToFirstCheckedOutIssue,
   crossIssueInfluenceLimitError,
   evaluateCrossIssueInfluenceLimit,
   observeCrossIssueInfluence,
@@ -56,6 +57,28 @@ function counterDb(
 }
 
 describe("cross-issue influence limit rollout", () => {
+  it("binds an unscoped timer run to its first checkout only", async () => {
+    const returning = vi.fn().mockResolvedValueOnce([{ id: "run-1" }]).mockResolvedValueOnce([]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const db = { update };
+    const input = {
+      companyId: "22222222-2222-4222-8222-222222222222",
+      runId: "11111111-1111-4111-8111-111111111111",
+      agentId: "33333333-3333-4333-8333-333333333333",
+      issueId: "44444444-4444-4444-8444-444444444444",
+    };
+
+    await expect(bindUnscopedRunToFirstCheckedOutIssue(db as never, input)).resolves.toBe(true);
+    await expect(bindUnscopedRunToFirstCheckedOutIssue(db as never, {
+      ...input,
+      issueId: "55555555-5555-4555-8555-555555555555",
+    })).resolves.toBe(false);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(returning).toHaveBeenCalledTimes(2);
+  });
+
   it("logs observations without enforcement during the one-week rollout", () => {
     const decision = evaluateCrossIssueInfluenceLimit({
       priorCount: CROSS_ISSUE_INFLUENCE_LIMIT,

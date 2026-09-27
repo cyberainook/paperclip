@@ -327,6 +327,7 @@ import {
 } from "../services/issue-thread-interaction-resolution.js";
 import { resolveSelectedSuggestedTasks } from "../services/issue-thread-interactions.js";
 import {
+  bindUnscopedRunToFirstCheckedOutIssue,
   crossIssueInfluenceLimitError,
   crossIssueInfluenceRunContextError,
   observeCrossIssueInfluence,
@@ -14905,6 +14906,14 @@ export function issueRoutes(
         throw error;
       }
       const actor = getActorInfo(req);
+      if (req.actor.type === "agent" && checkoutRunId && updated) {
+        await bindUnscopedRunToFirstCheckedOutIssue(db, {
+          companyId: issue.companyId,
+          runId: checkoutRunId,
+          agentId: req.body.agentId,
+          issueId: issue.id,
+        });
+      }
       if (updated?.harnessKind === "skill_test") {
         await companySkillsSvc.markTestRunRunning(
           updated.companyId,
