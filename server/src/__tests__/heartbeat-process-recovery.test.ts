@@ -1711,6 +1711,72 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect(result.continuationRequeued).toBe(0);
   });
 
+  it.each([
+    { status: "queued", identity: "checkoutRunId" },
+    { status: "running", identity: "executionRunId" },
+    { status: "scheduled_retry", identity: "checkoutRunId" },
+    { status: "running", identity: "nativeIssueId" },
+    { status: "queued", identity: "taskId" },
+  ] as const)(
+    "does not reclaim an issue with an active $status run identified by $identity",
+    async ({ status, identity }) => {
+      const { companyId, issueId, runId, wakeupRequestId } =
+        await seedStrandedIssueFixture({
+          status: "in_progress",
+          runStatus: "failed",
+        });
+      await db
+        .update(heartbeatRuns)
+        .set({
+          status,
+          nativeIssueId: identity === "nativeIssueId" ? issueId : null,
+          contextSnapshot: identity === "taskId" ? { taskId: issueId } : {},
+          finishedAt: null,
+          errorCode: null,
+          error: null,
+        })
+        .where(eq(heartbeatRuns.id, runId));
+      await db
+        .update(agentWakeupRequests)
+        .set({ status: "claimed", finishedAt: null, error: null })
+        .where(eq(agentWakeupRequests.id, wakeupRequestId));
+      await db
+        .update(issues)
+        .set({
+          checkoutRunId: identity === "checkoutRunId" ? runId : null,
+          executionRunId: identity === "executionRunId" ? runId : null,
+        })
+        .where(eq(issues.id, issueId));
+
+      const result =
+        await heartbeatService(db).reconcileStrandedAssignedIssues();
+
+      expect(result.skipped).toBe(1);
+      expect(result.escalated).toBe(0);
+      expect(result.issueIds).toEqual([]);
+      const [issue] = await db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, issueId));
+      expect(issue).toMatchObject({
+        status: "in_progress",
+        checkoutRunId: identity === "checkoutRunId" ? runId : null,
+        executionRunId: identity === "executionRunId" ? runId : null,
+      });
+      expect(
+        await db
+          .select()
+          .from(issueRecoveryActions)
+          .where(
+            and(
+              eq(issueRecoveryActions.companyId, companyId),
+              eq(issueRecoveryActions.sourceIssueId, issueId),
+            ),
+          ),
+      ).toHaveLength(0);
+    },
+  );
+
   it.each(["settled", "rejected", "late_callback"] as const)(
     "joins startup and reap retained cleanup, keeps recovery live, and drains its %s operation",
     async (outcome) => {
